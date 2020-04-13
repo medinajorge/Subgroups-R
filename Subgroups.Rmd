@@ -174,6 +174,10 @@ crime.to.men=read.csv('latin_sdmap_bin.csv')[-1]
 ```{r}
 print(crime.to.men)
 ```
+
+### Women
+
+
 ### Men 
 
 We will first calculate the rules using SD-Map and sort them according to their value on the Piatetsky-Shapiro quality measurement.
