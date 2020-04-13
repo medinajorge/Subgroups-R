@@ -1,5 +1,5 @@
 ---
-title: "Homework III"
+title: "Práctica de Descubrimiento de Subgrupos"
 author: "Javier Galván Fraile - Jorge Medina Hernández"
 date: "4/03/2020"
 output: 
@@ -12,35 +12,167 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r, warning=FALSE, error=FALSE, message=FALSE}
-#Libraries used:
-library(rsubgroup)
-```
+# Exercise 1.
 
-# Introduction 
+Los Angeles es la ciudad más grande del estado de California y es el hogar de aproximadamente 17 millones de personas. Es famosa por ser el centro de la producción de cine y televisión estadounidenses en Hollywood, así como el hogar de muchas celebridades. La mayoría de las actividades turísticas están conectadas a la industria cinematográfica (Universal Studios, Disneyland en el cercano Anaheim, Hollywood Walk of Fame ...), aunque la ciudad tiene algunas playas hermosas en el Pacífico. En cuanto a la seguridad, Los Angeles no tiene punto medio: mientras que la mayoría de los barrios turísticos como Hollywood, Beverly Hills o Santa Mónica son seguros, tiene algunas áreas muy peligrosas en el centro (Skid Row) y cercanas (South Central).
+
+En esta práctica, usaremos la base de datos de crímenes desde el 2010 hasta la actualidad proporcionada por el Departamento de Policia de Los Angeles. Esta base contiene las características de cada delito ocurrido en la ciudad de Los Angeles desde 2010. Estos datos se han transcrito a partir de los informes elaborados por la policia en papel por cada delito. Se puede descargar desde el enlace: https://data.lacity.org/A-Safe-City/Crime-Data-from-2010-to-Present/y8tr-7khq. Recoge alrededor de
+1.9 millones de incidentes criminales con 26 variables de distintos tipos. Sin embargo, usaremos solamente los datos correspondientes al año 2019.
+
+A partir de esta base, el objetivo principal es:
+
+* Descubrir subgrupos en los datos que puedan resultar de interés y su posterior interpretación
+
+Se valorarán los siguientes aspectos:
+
+  1. Calidad de los subgrupos encontrados, su interés e interpretación.
+  2. Uso de diferentes algoritmos de descubrimiento de subgrupos.
+  3. Uso de distintas medidas de calidad.
+  4. Implementación de alguna medida de calidad distinta de las consideradas en el paquete rsubgroup y aplicación de la misma a las reglas obtenidas en base a otras medidas sí contempladas en el rsubgroup.
+
+La práctica se realizará en grupos de 2-3 estudiantes y se deberá entregar un Rmd que incluya las instrucciones usadas, así como la memoria de la práctica. Se valorará especialmente el análisis de los resultados obtenidos.
+
+## Dataset analysis
 
 In this task we will use the [crime database]( https://data.lacity.org/A-Safe-City/Crime-Data-from-2010-to-2019/63jg-8b9z) from the Police Department of Los Angeles, which describes the features of each crime committed in LA between 2010 and 2019, although we will only analyze the ones which took place along 2019. 
 
 The main goal is to discover subgroups among data and analyze their quality, interest and interpretation.
 
-```{r, include=FALSE}
-##We will skip most of the data and then select only those of 2019
-#DB <- read.csv(file='Crime_Data_from_2010_to_2019.csv',skip=17e5)
-#headings <- read.csv('Crime_Data_from_2010_to_2019.csv',nrows=1)
-##The DB does not have the propper headings:
-#names(DB)<- names(headings)
-```
+We will directly load the data from 2019 alone and show its first rows as an example to see its structure
 
-We will directly load the data from 2019 alone and show an example to see its structure:
 ```{r}
 DB <- read.csv(file='Crime_Data_2019.csv')
-head(DB,n=1L)
+head(DB)
 ```
-jbhjbhj
+
+Let's get some insight about the different crimes 
+
+```{r}
+summary(DB)
+```
+
+We observe that some of the features of the dataset are redundant such as "AREA"-"AREA.NAME", "Crm.Cd"-"Crm.Cd.Desc" and "Premis.Cd"-"Premis.Desc", among others. These features represent mainly the code representing a feature and the feature name. Therefore, in our analysis we will restrict to some crime features that seem to be the more relevant, which are the following
+
+```{r}
+good_attributes <- c('Weapon.Desc','Vict.Sex', 'Crm.Cd.Desc', 'Vict.Age', 'Vict.Descent', 'TIME.OCC','DATE.OCC', 'AREA.NAME')
+print(good_attributes)
+```
+
+Thus, from the different attributes that characterise a crime we are focusing on 1 or 2 per group of features:
+
+  1. Time features: we are only going to work with the time ('TIME.OCC') and date ('DATE.OCC') at which the crime took place. The neglected time feature is the time at which it was reported to the local Community Police Station and we consider that this feature is less useful than the time at which it took place.
+  2. Spatial features: from this field we will restrict ourselves to the geographic area of the local Community Police Station where the crime was commited ('AREA.NAME'). Other features like the 'AREA', which represents the numeric label of the area, are not considered. Also we consider that the reported district number ('Rpt.Dist.No'), which represents the sub-area within the Area, has less importance than the Area itself and thus we will not take it into account. For this same reason we will not consider the latitude ('LAT'), the longitude ('LON'), the cross street of rounded address ('Cross.Street') and the street address of the crime incident ('LOCATION').
+  3. 
+  
+We must point out that a more exhaustive analysis of the crimes should consider those attributes we have neglected. However, as an educated approach we will focus on the above-mentioned.
 
 
-# Subgroups
+Lets discretize some attributes like TIME.OCC and DATE.OCC using a manual discretization (Freedman-Draconi method)
 
-# Quality measurement
+```{r}
+library(varrank)
+library(stringr)
+library(arules)
 
-# Discussion
+#DISCRETIZE TIME.OCC
+#We must first pad the military time with zeros, for which we need string characters
+times <- DB$TIME.OCC
+times.str <- unlist(strsplit(toString(times),", "))
+times.padded <- str_pad(times.str, width = 4, side="left", pad="0")
+#Now the first two digits are the #hours, and we have to add them the contribution from the minutes
+time.split <- strsplit(times.padded, "")
+h1 <- lapply(time.split,'[', 1)
+h2 <- lapply(time.split, '[', 2)
+min1 <- lapply(time.split,'[', 3)
+min2 <- lapply(time.split,'[', 4)
+hours <- as.numeric(paste0(h1,h2))
+mins <- as.numeric(paste0(min1,min2))
+processed.time <- hours + mins/60
+times.discretized.big =discretize(processed.time,method="interval",breaks=6, include.lowest = TRUE, right=TRUE)
+#times.discretized <- unlist(discretization(data.df = processed.time, discretization.method = "fd", frequency = FALSE))
+DB$TIME.OCC <- times.discretized.big
+
+
+#DISCRETIZE DATE.OCC
+#Finally we will discretized dates by month
+dates.str <- times.str <- unlist(strsplit(toString(DB$DATE.OCC),", "))
+date.split <- strsplit(dates.str, "")
+d1 <- lapply(date.split,'[', 1)
+d2 <- lapply(date.split, '[', 2)
+months <- as.factor(paste0(d1,d2))
+DB$DATE.OCC <- months
+```
+
+## Subgroups
+vamos a buscar subgrupos
+```{r}
+Sys.setenv(JAVA_HOME="C:/Program Files/Java/jdk-13.0.2/")
+library(rsubgroup)
+```
+
+Definimos una función encargada de ello
+```{r}
+dataframe.p <- function(DB, target.class, target, antecedent,method,quality,csvname){
+  DB.MOD<-data.frame(DB)
+  #We get rid of bad labeled of unlabeled victim sex
+  if (target.class=="Vict.Sex" | sum(antecedent=="Vict.Sex")>0) {
+  DB.MOD <- DB.MOD[(DB.MOD$Vict.Sex!='X' & DB.MOD$Vict.Sex!='' & DB.MOD$Vict.Sex!='N' & DB.MOD$Vict.Sex!='H'),]
+  }
+  #We now clean the 0 ages
+  if (target.class=="Vict.Age" | sum(antecedent=="Vict.Age")>0) {
+  DB.MOD <- DB.MOD[DB.MOD$Vict.Age!='0',]  
+  #Discretizamos las edades
+  DB.MOD$Vict.Age=discretize(DB.MOD$Vict.Age,method="interval",breaks=10,include.lowest = TRUE, right=TRUE)
+  }
+  if (target.class=="Weapon.Desc" | sum(antecedent=="Weapon.Desc")>0) {
+  DB.MOD <- DB.MOD[DB.MOD$Weapon.Desc!="",]
+  }
+  if (target.class=="Vict.Descent" | sum(antecedent=="Vict.Descent")>0) {
+  DB.MOD <- DB.MOD[DB.MOD$Vict.Descent!="" & DB.MOD$Vict.Descent!="X",]
+  }
+  
+  datos.sesgados=DiscoverSubgroups(DB.MOD,as.target(target.class,target),
+                                   new("SDTaskConfig",attributes=antecedent,method=method,qf=quality))
+  write.csv(ToDataFrame(datos.sesgados),csvname)
+  headings<- c("Target class","Target", "Antecedent","Method","Quality")
+  data <- c(target.class,target,paste(antecedent, collapse=","), method,quality)
+  config <- data.frame(headings,data)
+  #Now the name of the second file
+  infoname<- unlist(strsplit(csvname,""))
+  infoname <- paste0(infoname[-length(infoname)+3:-length(infoname)],collapse="")#delete .csv
+  infoname <- paste0(infoname, "_info.csv",collapse="")
+  write.csv(config,infoname)
+  #Print also on the screen
+  ToDataFrame(datos.sesgados)
+  }
+```
+
+
+### Latins
+The County and the City of Los Angeles has been nicknamed the "Gang Capital of America," with an estimated 450 active gangs with a combined membership of more than 45,000 in 2019. In the first part of this project we will focus in analyzing the level of security of different areas in the city and try to relate these results to the presence of street gangs in LA.
+
+Particularly, near the intersection of 18th Street and Union Avenue in downtown Los Angeles, we have the largest street gang of the city with around 15,000 members known as "18 Street", which is mainly formed by latin people. 
+
+Lets see the number of crimes in the different 21 Community Police Stations 
+
+```{r}
+table(DB$AREA.NAME)
+```
+
+According to the dataset we have that many crimes occur in the areas where the "18 Street" gang habit: Rampart and Newton. Also, other dangerous areas are Skid Row (Central) and South Central (77th Street).
+
+So we now that this street gang criminal activities usually include drug trafficking, assault and robbery. Then, we want to verify this connection by looking for subgroups with targets these crimes and the areas as antecedents.
+
+```{r eval=FALSE}
+dataframe.p(DB, target.class = 'Vict.Descent', target='H', antecedent = c('Crm.Cd.Desc', 'AREA.NAME', 'TIME.OCC', 'Weapon.Desc'), method="sdmap", quality="bin", csvname = "latin_sdmap_bin.csv")
+```
+
+```{r include=FALSE}
+crime.to.men=read.csv('latin_sdmap_bin.csv')[-1]
+```
+
+```{r}
+print(crime.to.men)
+```
+
+## Conclussion
