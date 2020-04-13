@@ -174,5 +174,46 @@ crime.to.men=read.csv('latin_sdmap_bin.csv')[-1]
 ```{r}
 print(crime.to.men)
 ```
+### Men 
 
+We will first calculate the rules using SD-Map and sort them according to their value on the Piatetsky-Shapiro quality measurement.
+
+```{r eval=FALSE} 
+crime.to.men <- dataframe.p(DB,"Vict.Sex","M",c("Vict.Descent","Premis.Desc","Crm.Cd.Desc", "TIME.OCC"),"sdmap","ps","men_wellprocessed.csv")
+```
+
+```{r include=FALSE}
+crime.to.men=read.csv('SELECTED/men_wellprocessed.csv')[-1]
+```
+
+```{r}
+print(crime.to.men)
+```
+
+Regarding the first rule, the class "O" from "Vict.Descent" indicates that the victim had a descent different than asian, black, or hispanic among others; a group which constitutes about 9% of the total number of victims. Thus, we see that if the victim belongs to any of these minoritary groups, there is a 65% probability for it to be a man, with a high quality value for both $\chi^{2}$ and Piatetsky-Shapiro.
+
+The second rule, which is probably the most relevant, shows that if an aggravated assault or an assault wih a deadly weapon was commited, there is a 73% probability of the victim being a men, with high values for the two quality measurements mentioned. In principle there could be many factors contributing to the apppearance of this rule. For instance, as street gangs are conformed mostly by men, during the street conflicts they are more likely to be both the victims and the agressors.
+
+Finally, we would like to highlight rule number 9, indicating that if a shoplifting crime was commited it is 83% likely that the victim is a man. In principle, as is not statistically easier to steal material from men, the most likely explanation is that shoplifters are more compassionate towards women than men.
+
+Let's see the results obtained using the BSD algorithm, sorting the rules using the binomial test as a measurement of their quality.
+
+```{r eval=FALSE} 
+crime.to.men.v2 <- dataframe.p(DB,"Vict.Sex","M",c("Vict.Descent","Premis.Desc","Crm.Cd.Desc", "TIME.OCC"),"bsd","bin","men_wellprocessed.csv")
+```
+
+```{r include=FALSE}
+crime.to.men.v2=read.csv('SELECTED/men_bin_bsd.csv')[-1]
+```
+
+```{r}
+print(crime.to.men.v2)
+```
+
+### Time interval (8,12]
+
+
+```{r eval=FALSE} 
+dataframe.p(DB,"TIME.OCC","(8.01,12]",c("Vict.Sex","Premis.Desc","Vict.Descent","Crm.Cd.Desc"),"sdmap","ps","8am_wellprocessed.csv")
+```
 ## Conclussion
