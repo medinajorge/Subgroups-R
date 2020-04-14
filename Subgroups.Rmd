@@ -34,46 +34,57 @@ La práctica se realizará en grupos de 2-3 estudiantes y se deberá entregar un
 
 ## Dataset analysis
 
-In this task we will use the [crime database]( https://data.lacity.org/A-Safe-City/Crime-Data-from-2010-to-2019/63jg-8b9z) from the Police Department of Los Angeles, which describes the features of each crime committed in LA between 2010 and 2019, although we will only analyze the ones which took place along 2019. 
+### Feature selection
 
-The main goal is to discover subgroups among data and analyze their quality, interest and interpretation.
+In this task we will use the [crime database]( https://data.lacity.org/A-Safe-City/Crime-Data-from-2010-to-2019/63jg-8b9z) from the Police Department of Los Angeles, which describes the features of each crime committed in LA between 2010 and 2019, although we will only analyze the ones which took place along 2019. The main goal is to discover subgroups among data and analyze their quality, interest and interpretation. 
 
-We will directly load the data from 2019 alone and show its first rows as an example to see its structure
+Firstly we will directly load the data from 2019 alone and show its first rows as an example to see how it is structured.
 
 ```{r}
 DB <- read.csv(file='Crime_Data_2019.csv')
 head(DB)
 ```
 
-Let's get some insight about the different crimes 
+Let's get some insight about the different crimes by looking at the statistical properties of the different attributes 
 
 ```{r}
 summary(DB)
 ```
 
-We observe that some of the features of the dataset are redundant such as "AREA"-"AREA.NAME", "Crm.Cd"-"Crm.Cd.Desc" and "Premis.Cd"-"Premis.Desc", among others. These features represent mainly the code representing a feature and the feature name. Therefore, in our analysis we will restrict to some crime features that seem to be the more relevant, which are the following
+We observe that we have such a large number of features that we must select the most appropiate ones for our study in order to extract useful information from them. Thus, from the different attributes that characterise a crime we are focusing on 1 or 2 per group of features:
+
+  1. **Time features**. We are only going to work with the time ('TIME.OCC') and date ('DATE.OCC') at which the crime took place. The neglected time feature is the time at which it was reported to the local Community Police Station ('Date.Rptd') as we consider that this feature is less useful than the time at which the crime took place.
+  2. **Spatial features**. From this field we will pay special attention to the geographic area of the local Community Police Station where the crime was commited ('AREA.NAME') which are shown in the following map. Also we will take into consideration the place where the crime occurred ('Premis.Desc'). Other features like 'AREA', which represents the numeric label of the area, are not considered. Also we consider that the reported district number ('Rpt.Dist.No'), which represents the sub-area within the area where the crime occurred, has less importance than the area itself and thus we will not take it into account. For this same reason we will not consider the latitude ('LAT'), the longitude ('LON'), the cross street of rounded address ('Cross.Street') and the street address of the crime incident ('LOCATION').
+  
+  
+  ![Map of the geographic area of the Community Police Stations in the City of Los Ángeles. Retrieved from https://www.qsl.net/n6uru/images/lapdcitymap2009.jpg . ](https://www.qsl.net/n6uru/images/lapdcitymap2009.jpg)
+  
+  
+  3. **Victim details**. From this field we will work with the victim age ('Vict.Age'), the victim sex ('Vict.Sex') and the victim descent ('Vict.Descent') as one of our goals is to identify groups of people that are more susceptible to suffer a crime.
+  
+  4. **Type of crime**. Among the several features that are provided we will focus on the crime committed ('Crm.Cd') and the weapon used ('Weapon.Desc'). Other features like 'Mocodes' are so specific that will require a lot of work in order to extract useful information to discover subgroups from it. The same happens for the less important crimes commited by a criminal ('Crm.Cd1', 'Crm.Cd2', 'Crm.Cd3' and 'Crm.Cd4').
+  
+Consequently, in our analysis we will restrict to some crime features that seem to be the more relevant, which are the following
 
 ```{r}
-good_attributes <- c('Weapon.Desc','Vict.Sex', 'Crm.Cd.Desc', 'Vict.Age', 'Vict.Descent', 'TIME.OCC','DATE.OCC', 'AREA.NAME')
+good_attributes <- c('Weapon.Desc','Vict.Sex', 'Crm.Cd.Desc', 'Vict.Age', 'Vict.Descent', 'TIME.OCC','DATE.OCC', 'AREA.NAME', 'Premis.Desc')
 print(good_attributes)
 ```
 
-Thus, from the different attributes that characterise a crime we are focusing on 1 or 2 per group of features:
-
-  1. Time features: we are only going to work with the time ('TIME.OCC') and date ('DATE.OCC') at which the crime took place. The neglected time feature is the time at which it was reported to the local Community Police Station and we consider that this feature is less useful than the time at which it took place.
-  2. Spatial features: from this field we will restrict ourselves to the geographic area of the local Community Police Station where the crime was commited ('AREA.NAME'). Other features like the 'AREA', which represents the numeric label of the area, are not considered. Also we consider that the reported district number ('Rpt.Dist.No'), which represents the sub-area within the Area, has less importance than the Area itself and thus we will not take it into account. For this same reason we will not consider the latitude ('LAT'), the longitude ('LON'), the cross street of rounded address ('Cross.Street') and the street address of the crime incident ('LOCATION').
-  3. 
-  
-We must point out that a more exhaustive analysis of the crimes should consider those attributes we have neglected. However, as an educated approach we will focus on the above-mentioned.
+We must point out that a more exhaustive analysis of the crimes should consider those attributes that we have neglected. However, as an educated approach we will focus on the above-mentioned.
 
 
-Lets discretize some attributes like TIME.OCC and DATE.OCC using a manual discretization (Freedman-Draconi method)
+### Discretization
+
+There are some attributes which require a discretization of the possible values in order to extract useful information of them. In particular, we will discretize the hour at which the crime took place in intervals of 4 hours. With respect to the date the crime took place we will focus on the month and discretize the dates of the dataset into the 12 months.
 
 ```{r}
 library(varrank)
 library(stringr)
 library(arules)
+```
 
+```{r}
 #DISCRETIZE TIME.OCC
 #We must first pad the military time with zeros, for which we need string characters
 times <- DB$TIME.OCC
@@ -91,7 +102,6 @@ processed.time <- hours + mins/60
 times.discretized.big =discretize(processed.time,method="interval",breaks=6, include.lowest = TRUE, right=TRUE)
 #times.discretized <- unlist(discretization(data.df = processed.time, discretization.method = "fd", frequency = FALSE))
 DB$TIME.OCC <- times.discretized.big
-
 
 #DISCRETIZE DATE.OCC
 #Finally we will discretized dates by month
@@ -147,35 +157,194 @@ dataframe.p <- function(DB, target.class, target, antecedent,method,quality,csvn
   }
 ```
 
-
 ### Latins
-The County and the City of Los Angeles has been nicknamed the "Gang Capital of America," with an estimated 450 active gangs with a combined membership of more than 45,000 in 2019. In the first part of this project we will focus in analyzing the level of security of different areas in the city and try to relate these results to the presence of street gangs in LA.
 
-Particularly, near the intersection of 18th Street and Union Avenue in downtown Los Angeles, we have the largest street gang of the city with around 15,000 members known as "18 Street", which is mainly formed by latin people. 
+In the first part of this project we will focus in analyzing the level of security of different areas in Los Ángeles and try to relate these results to the presence of street gangs in the city. The County and the City of Los Angeles has been nicknamed the "Gang Capital of America," with an estimated 450 active gangs with a combined membership of more than 45,000 in 2019.  Particularly, near the intersection of 18th Street and Union Avenue in downtown Los Angeles, we have the largest street gang of the city with around 15,000 members known as "18 Street", which is mainly formed by latin people. Other relevant latin street gangs are 204th Street Gang (Mexicans), La Mirada Locos (Hispanic), Avenues (Mexicans), Canoga Park Alabama (Hispanic) and Mara Salva Trucha (Salvadoran, Guatemalan and Honduran). We can check the areas where these street gangs habit in the following map.
 
-Lets see the number of crimes in the different 21 Community Police Stations 
+![Map of street gangs distribution in the City of Los Ángeles. Retrieved from http://blogs.kcrw.com/dna/wp-content/uploads/2018/03/gang_injun_Citywide_2012_2-page-001.jpg ](http://blogs.kcrw.com/dna/wp-content/uploads/2018/03/gang_injun_Citywide_2012_2-page-001.jpg)
 
-```{r}
-table(DB$AREA.NAME)
-```
+Our objective is now to extract from the dataset potential crimes which involve these latin street gangs and analyze them. For that purpose we will use the function DiscoverSubgroups from the 'rsubgroup' library with the 'sdmap' method and the quality function Chi-Square-Test as well as the Piatetsky-Shapiro quality measurement, given by
 
-According to the dataset we have that many crimes occur in the areas where the "18 Street" gang habit: Rampart and Newton. Also, other dangerous areas are Skid Row (Central) and South Central (77th Street).
+$$p s(R)=n(\text { Target}_{\text{value} } \cdot \text { Cond })-\frac{n(\text { Target}_{\text{value}}) \cdot n(\text {Cond})}{n_{s}}$$
 
-So we now that this street gang criminal activities usually include drug trafficking, assault and robbery. Then, we want to verify this connection by looking for subgroups with targets these crimes and the areas as antecedents.
+where $n_s$ is the total number of examples.
 
-```{r eval=FALSE}
-dataframe.p(DB, target.class = 'Vict.Descent', target='H', antecedent = c('Crm.Cd.Desc', 'AREA.NAME', 'TIME.OCC', 'Weapon.Desc'), method="sdmap", quality="bin", csvname = "latin_sdmap_bin.csv")
+Consequently, we will consider as consequent/target the latin people ('Vict.Descent' = 'H') and as antecedent the following attributes: 'Crm.Cd.Desc', 'AREA.NAME' and 'TIME.OCC'. Thus, we are looking for the worst areas and hours for the latin people as well as the most common crimes they suffer. Notice that we are not considering the weapon used in the crime because in many crimes this data is not proportioned and thus would affect outcoming results by reducing the dataset size.
+
+```{r  eval=FALSE}
+latin.1 <- dataframe.p(DB, target.class = 'Vict.Descent', target='H', antecedent = c('Crm.Cd.Desc', 'AREA.NAME', 'TIME.OCC'), method="sdmap", quality="ps", csvname = "latin_sdmap_ps.csv")
 ```
 
 ```{r include=FALSE}
-crime.to.men=read.csv('latin_sdmap_bin.csv')[-1]
+latin.1 <- read.csv('latin_sdmap_ps.csv')[-1]
 ```
 
 ```{r}
-print(crime.to.men)
+print(latin.1)
 ```
 
+We now use as the quality function the Binomial-Test in order to determine how far from random choice are the subgroups found.
+
+```{r  eval=FALSE}
+latin.2 <- dataframe.p(DB, target.class = 'Vict.Descent', target='H', antecedent = c('Crm.Cd.Desc', 'AREA.NAME', 'TIME.OCC'), method="sdmap", quality="bin", csvname = "latin_sdmap_bin.csv")
+```
+
+```{r include=FALSE}
+latin.2 <- read.csv('latin_sdmap_bin.csv')[-1]
+```
+
+```{r}
+print(latin.2)
+```
+
+Next, we will change the method used to find subgroups by selecting the BSD method and we keep the quality function to be the Binomial-Test.
+
+```{r  eval=FALSE}
+latin.3 <- dataframe.p(DB, target.class = 'Vict.Descent', target='H', antecedent = c('Crm.Cd.Desc', 'AREA.NAME', 'TIME.OCC'), method="bsd", quality="bin", csvname = "latin_bsd_bin.csv")
+```
+
+```{r include=FALSE}
+latin.3 <- read.csv('latin_bsd_bin.csv')[-1]
+```
+
+```{r}
+print(latin.3)
+```
+
+Other quality measure functions, like lift or relative gain, give rise to rules with really high accuracy ($\approx 1$) but with a really low support (less than 10 cases overall the dataset). Therefore, the use of these quality measures was really unproductive. Otherwise, with respect to the method used to determine the subgroups, we find that both SD-map and BSD give the same results as expected.
+
+Finally, we are going to consider another quality measurement function. In particular, the quality measurement $Q_c$ which measures the balance between true and false positives as
+
+$$ Q_{c}(R)=T P-c \cdot F P=n(\text { Target}_{\text {value}} \cdot \text { Cond })-c \cdot n(\overline{\text {Target}_{\text {value}}} \cdot \text {Cond}) $$
+where $n(\overline{\text {Target}_{\text {value}}} \cdot \text { Cond })=F P$ are the examples satisfying the antecedent but no the consequent and $c$ is a generalization parameter. Particularly, we will take a value $c=2$ in order to penalize those rules that satisfy only the antecedent (false positives).
+
+```{r}
+Q.c <- function(p, n.target.cond, c){
+  n.cond = n.target.cond/p
+  n.notarget.cond <- n.cond-n.target.cond
+  q.c <- n.target.cond - c*n.notarget.cond
+  return(q.c)
+}
+```
+
+```{r}
+latin.4 <- data.frame(latin.3)
+latin.4$quality = Q.c(latin.3$p, latin.3$size, 2)
+latin.4 <- latin.4[order(-latin.4$quality),]
+print(latin.4)
+```
+
+We find that the quality measurement $Q_c$ penalizes rules with a large number of examples but not so high accuracy, pointing out that the most important rule is the one related to crimes suffered in the area of Hollenbeck.
+
+Before analyzing all the rules obtained we must highlight that the percentage of latin people in Los Ángeles is 48.6% (data obtained from the [official census](https://www.census.gov/quickfacts/fact/table/losangelescountycalifornia/RHI725218)), so rules with an accuracy lower than this percentage would not give new knowledge. Then, the most interesting rules obtained are the following:
+
+  1. **Most dangerous zones**. According to all the quality measures we find that the three more important rules by far are those related to areas: 
++ AREA.NAME=Hollenbeck -> Vict.Descent=H; p=0.76, ps=2305.59, bin=28.7
++ AREA.NAME=Newton -> Vict.Descent=H; p=0.66, ps=2396.02, bin=24.99
++ AREA.NAME=Mission -> Vict.Descent=H; p=0.68, ps=2159.93, bin=24.85
+  
+2. **Most dangerous hours**. We also find that the risk of suffering a crime in the areas above-mentioned increases at certain hours:
+
++ AREA.NAME=Hollenbeck, TIME.OCC=(20,24] -> Vict.Descent=H; p=0.80, ps=563.05, bin=15.12
++ AREA.NAME=Newton, TIME.OCC=(16,20] -> Vict.Descent=H; p=0.67, ps=567.65, bin=12.48	
++ AREA.NAME=Mission, TIME.OCC=(20,24] -> Vict.Descent=H; p=0.74, ps=545.61, bin=13.67
+  
+3. **Most common crimes**. Finally, if we focus in the Hollenbeck area, we discover that latin people suffer some characteristic crimes related to assaults:
+
++ AREA.NAME=Hollenbeck, Crm.Cd.Desc=BATTERY - SIMPLE ASSAULT -> Vict.Descent=H; p=0.84, bin=12.48
++ AREA.NAME=Hollenbeck, Crm.Cd.Desc=INTIMATE PARTNER - SIMPLE ASSAULT -> Vict.Descent=H; p=0.86, bin=10.54
+  
+From all the rules found we see that the most interesting ones are those related to the area where crimes occurred, presenting high values in all the quality measures. Other more elaborated rules with more than one antecendent show higher accuracy but they are penalized for presenting a smaller sample.
+
+Thus, we conclude that Hollenbeck is a really dangerous region if you are latin. This is not surprising if we take into account that Hollenbeck is a gang-dominated region of Los Angeles with around 31 different gangs (see [*Social network clustering: An analysis of gang networks - K Luh et al.*](https://pdfs.semanticscholar.org/00f8/b898ae247d41b46677a7817418b3d6b2865d.pdf?_ga=2.103997891.2141519570.1586890929-1146159782.1584761722)). Other regions that you should avoid are Newton (neighbour area of Hollenbeck) and Mission, specially in the night. 
+
+
+
 ### Women
+
+In the second part of this project we will focus in analyzing other of the most vulnerable communities against crime, the female population. In LA around 50.7% of the population are women (data obtained from the [official census](https://www.census.gov/quickfacts/fact/table/losangelescountycalifornia/RHI725218)) and they are susceptible to suffer from gender related violence, specially from their intimate partners. This type of violence covers intimate partner simple asssault under the category of domestic violence including stalking, rape and murder (see  [*As homicides drop in L.A., more women are being killed — often by intimate partners. Los Angeles Times*](https://www.latimes.com/projects/women-violence-homicides-increase-death-murder/)). 
+
+![Poster against gender violence published by Los Ángeles County. Retrieved from http://dpss.lacounty.gov/wps/wcm/connect/1cf5d568-7029-4789-8c0f-7c72b23bb73c/1/dv.jpg?MOD=AJPERES&CACHEID=1cf5d568-7029-4789-8c0f-7c72b23bb73c/1 . ](http://dpss.lacounty.gov/wps/wcm/connect/1cf5d568-7029-4789-8c0f-7c72b23bb73c/1/dv.jpg?MOD=AJPERES&CACHEID=1cf5d568-7029-4789-8c0f-7c72b23bb73c/1)
+
+Our goal is now to discover within the dataset potential crimes suffered by women and analyze them. Consequently, we will consider as consequent/target the female population ('Vict.Sex' = 'F') and as antecedent the following attributes: 'Crm.Cd.Desc', 'Premis.Desc' and 'TIME.OCC'. Thus, we are looking for the most common crimes they suffer as well as the places and hours where they took place. Notice that we are not considering the weapon used in the crime because in many crimes this data is not proportioned and thus would affect outcoming results by reducing the dataset size.
+
+For that purpose we will use the function DiscoverSubgroups from the 'rsubgroup' library with the 'sdmap' method and the quality function Chi-Square-Test as well as the Piatetsky-Shapiro quality measurement.
+
+```{r  eval=FALSE}
+women.1 <- dataframe.p(DB, target.class = 'Vict.Sex', target='F', antecedent = c('Crm.Cd.Desc', 'TIME.OCC', 'Premis.Desc'), method="sdmap", quality="ps", csvname = "women_sdmap_ps.csv")
+```
+
+```{r include=FALSE}
+women.1 <- read.csv('women_sdmap_ps.csv')[-1]
+```
+
+```{r}
+print(women.1)
+```
+
+We now use as the quality function the Binomial-Test in order to determine how far from random choice are the subgroups found.
+
+```{r  eval=FALSE}
+women.2 <- dataframe.p(DB, target.class = 'Vict.Sex', target='F', antecedent = c('Crm.Cd.Desc', 'TIME.OCC', 'Premis.Desc'), method="sdmap", quality="bin", csvname = "women_sdmap_bin.csv")
+```
+
+```{r include=FALSE}
+women.2 <- read.csv('women_sdmap_bin.csv')[-1]
+```
+
+```{r}
+print(women.2)
+```
+
+Next, we will change the method used to find subgroups by selecting the BSD method and we keep the quality function to be the Binomial-Test.
+
+```{r  eval=FALSE}
+women.3 <- dataframe.p(DB, target.class = 'Vict.Sex', target='F', antecedent = c('Crm.Cd.Desc', 'TIME.OCC', 'Premis.Desc'), method="bsd", quality="bin", csvname = "women_bsd_bin.csv")
+```
+
+```{r include=FALSE}
+women.3 <- read.csv('women_bsd_bin.csv')[-1]
+```
+
+```{r}
+print(women.3)
+```
+
+Other quality measurement functions, like lift or relative gain, again give rise to rules with really high accuracy ($\approx 1$) but with a really low support (less than 10 cases overall the dataset). Therefore, the use of these quality measures was really unproductive. Notice also that both methods used to determine the subgroups, SD-map and BSD, give the same results as expected.
+
+Finally, we are going to consider again the quality measurement $Q_c$ with a value $c=2$ in order to penalize those rules that satisfy only the antecedent (false positives).
+
+```{r}
+women.4 <- data.frame(women.3)
+women.4$quality = Q.c(women.3$p, women.3$size, 2)
+women.4 <- women.4[order(-women.4$quality),]
+print(women.4)
+```
+
+The most interesting rules obtained are the following:
+  
+  1. **Crimes suffered**. According to all the quality measures we find that women are quite more susceptible to suffer certain crimes than men. In particular some important rules according to the Piatetsky-Shapiro quality measure are
+  
++ Crm.Cd.Desc=INTIMATE PARTNER - SIMPLE ASSAULT -> Vict.Sex=F; p=0.76, ps=3467.32, bin=31.64
++ Crm.Cd.Desc=VIOLATION OF RESTRAINING ORDER -> Vict.Sex=F; p=0.77, ps=751.17	, bin=14.89
++ Crm.Cd.Desc=INTIMATE PARTNER-AGGRAVATED ASSAULT -> Vict.Sex=F; p=0.77, ps=849.19, bin=15.84	
+
+  Notice that these rules present a high value in the Piatetsky-Shapiro measurement, mainly due to the fact that are laws with a large support. However, if we consider the other three quality measures: the Binomial Test, the Chi-Square-Test and $Q_c$, we find another two important rules with a much lower support but a really large accuracy:
+    
++ Crm.Cd.Desc=RAPE, FORCIBLE -> Vict.Sex=F; p=0.99, bin=15.30
++ Crm.Cd.Desc=BATTERY WITH SEXUAL CONTACT -> Vict.Sex=F; p=0.90, bin=14.50	
+
+  These large accuracies highlight the fact that these crimes are suffered almost exclusively by women.
+    
+2. **Domestic crimes**. Our analysis also shows that most crimes commited in a domestic environment are suffered by women, in particular we find the rules
+  
++ Premis.Desc=SINGLE FAMILY DWELLING -> Vict.Sex=F; p=0.57, ps=3882.51, bin=19.78	
++ Premis.Desc=MULTI-UNIT DWELLING (APARTMENT, DUPLEX, ETC) -> Vict.Sex=F; p=0.60, ps=2954.64, bin=19.43	
+
+
+From all the rules we have found, the most interesting ones are those related to the type of crime suffered by women, presenting high values in all the quality measures. Other more elaborated rules with more than one antecendent present higher accuracy but they are penalized for presenting a smaller sample. The same happens for rules with a smaller sample but with large accuracies. Also, the quality measurement $Q_c$ penalizes those rules with a large number of examples but not so high accuracy, pointing out that the most important rule is the one related to simple assault performed by intimate partners.
+
+We conclude that women are really susceptible to suffer from different type of assaults, including rape and sexual contact, in comparison with men. Furthermore, we observe that these crimes are more prone to happen in a domestic environment.
 
 
 ### Men 
