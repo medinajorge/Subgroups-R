@@ -1,7 +1,7 @@
 ---
 title: "Práctica de Descubrimiento de Subgrupos"
 author: "Javier Galván Fraile - Jorge Medina Hernández"
-date: "4/03/2020"
+date: "4/19/2020"
 output: 
   html_document:
     toc: true
@@ -114,46 +114,102 @@ DB$DATE.OCC <- months
 ```
 
 ## Subgroups
-vamos a buscar subgrupos
-```{r}
+```{r eval=FALSE, include=FALSE}
 Sys.setenv(JAVA_HOME="C:/Program Files/Java/jdk-13.0.2/")
 library(rsubgroup)
 ```
 
-Definimos una función encargada de ello
+For the purpose of identifying the subgroups we have defined the function `Subgroups.finder`, which uses `DiscoverSubgroups` from the 'rsubgroup' library for the subgroups mining and records the results in csv files. It contains the following arguments:
+
+<table style="width:100%">
+  <tr>
+    <td> `data.base` </td>
+    <td > A data.frame in which perform the subgroups search.</td>
+  </tr>
+  <tr>
+    <td>  `target.attribute` </td>
+    <td>Target attribute to consider for subgroup discovery.</td>
+  </tr>
+  <tr>
+    <td> `target.value` </td>
+    <td >  Level within the target attribute to consider for subgroup discovery.</td>
+  </tr>
+    <tr>
+    <td> `antecedent` </td>
+    <td >List of attributes to consider for mining.</td>
+  </tr>
+    <tr>
+    <td> `method` </td>
+    <td >Mining method; one of Beam-Search `beam`, BSD `bsd`, SD-Map `sdmap`, SD-Map en-
+abling internal disjunctions `sdmap-dis`.</td>
+  </tr>
+   <tr>
+    <td> `quality` </td>
+    <td > Quality function; one of: Binomial-Test `bin`, Chi-Square-Test `chi2`, Lift `lift`, Piatetsky-Shapiro `ps`, Gain `gain`, Relative Gain `relgain`, Weighted Relative Accuracy `wracc`.</td>
+  </tr>
+   <tr>
+    <td> `path.csv` </td>
+    <td > Path for the creation of a csv file containing the subgroups found.</td>
+  </tr>
+</table>
+<style>
+.tab {border-collapse:collapse;}
+th, td {
+  padding: 10px;
+}
+</style>
+
+<p style="margin-bottom:0.25cm;">  </p>
+
+The function outputs two csv files: one containing the subgroups found and located in the desired path `path.csv`, and a second one in `path_info.csv` including the arguments used for the subgroups search. Lastly, since we were obtaining a large number of rules linked to unlabeled data (for instance the value " " from  'Weapon.Desc'), we decided to filter the data base prior to the search; removing the rows related to unknown values of a given feature provided it was part of the antecedent or the target value, i.e. whenever we were focusing on this specific attribute for the subgroups discovery. The classes affected by this process are 'Weapon.Desc','Vict.Sex', 'Vict.Descent' and 'Vict.Age'. In the case of the latter there was a disproportional amount of crimes against people with 0 years of age, as we will show below.
+
 ```{r}
-dataframe.p <- function(DB, target.class, target, antecedent,method,quality,csvname){
-  DB.MOD<-data.frame(DB)
+hist(DB$Vict.Age, breaks=100, xlab = "Age of the victim", main="Histogram - Age of the victims" )
+```
+
+The most likely explanation is that the police department used "0" as a label for "unknown", specially taking into account the type of crimes committed against them. As an example, we will show the top 5 kind of crimes they suffered:
+
+```{r}
+crimes.to.0years <- unlist(table(DB$Crm.Cd.Desc[DB$Vict.Age==0]))
+print(crimes.to.0years[order(crimes.to.0years,decreasing = TRUE)][1:5])
+```
+
+As we see they can not be related to people of 0 years of age. Lastly, after filtering the age we discretized it in intervals of 10 years of length.
+```{r}
+library(rsubgroup)
+Subgroups.finder <- function(database, target.attribute, target.level , antecedent,method,quality,path.csv){
+  DB.MOD <- data.frame(DB)
   #We get rid of bad labeled of unlabeled victim sex
-  if (target.class=="Vict.Sex" | sum(antecedent=="Vict.Sex")>0) {
+  if (target.attribute=="Vict.Sex" | sum(antecedent=="Vict.Sex")>0) {
   DB.MOD <- DB.MOD[(DB.MOD$Vict.Sex!='X' & DB.MOD$Vict.Sex!='' & DB.MOD$Vict.Sex!='N' & DB.MOD$Vict.Sex!='H'),]
   }
   #We now clean the 0 ages
-  if (target.class=="Vict.Age" | sum(antecedent=="Vict.Age")>0) {
+  if (target.attribute=="Vict.Age" | sum(antecedent=="Vict.Age")>0) {
   DB.MOD <- DB.MOD[DB.MOD$Vict.Age!='0',]  
   #Discretizamos las edades
   DB.MOD$Vict.Age=discretize(DB.MOD$Vict.Age,method="interval",breaks=10,include.lowest = TRUE, right=TRUE)
   }
-  if (target.class=="Weapon.Desc" | sum(antecedent=="Weapon.Desc")>0) {
+  if (target.attribute=="Weapon.Desc" | sum(antecedent=="Weapon.Desc")>0) {
   DB.MOD <- DB.MOD[DB.MOD$Weapon.Desc!="",]
   }
-  if (target.class=="Vict.Descent" | sum(antecedent=="Vict.Descent")>0) {
+  if (target.attribute=="Vict.Descent" | sum(antecedent=="Vict.Descent")>0) {
   DB.MOD <- DB.MOD[DB.MOD$Vict.Descent!="" & DB.MOD$Vict.Descent!="X",]
   }
   
-  datos.sesgados=DiscoverSubgroups(DB.MOD,as.target(target.class,target),
-                                   new("SDTaskConfig",attributes=antecedent,method=method,qf=quality))
-  write.csv(ToDataFrame(datos.sesgados),csvname)
-  headings<- c("Target class","Target", "Antecedent","Method","Quality")
-  data <- c(target.class,target,paste(antecedent, collapse=","), method,quality)
+  subgroups.found=DiscoverSubgroups(DB.MOD,as.target(target.attribute,target),
+                                  new("SDTaskConfig",attributes=antecedent,method=method,qf=quality))
+  write.csv(ToDataFrame(subgroups.found),path.csv)
+  #Now we will construct the second data frame containing the information of the subgroups search.
+  headings <- c("Target attribute","Target value", "Antecedent","Method","Quality")
+  data <- c(target.attribute,target.value,paste(antecedent, collapse=","), method,quality)
   config <- data.frame(headings,data)
   #Now the name of the second file
-  infoname<- unlist(strsplit(csvname,""))
+  infoname<- unlist(strsplit(path.csv,""))
   infoname <- paste0(infoname[-length(infoname)+3:-length(infoname)],collapse="")#delete .csv
   infoname <- paste0(infoname, "_info.csv",collapse="")
   write.csv(config,infoname)
-  #Print also on the screen
-  ToDataFrame(datos.sesgados)
+  #Print the result also on the screen
+  ToDataFrame(subgroups.found)
   }
 ```
 
@@ -172,7 +228,7 @@ where $n_s$ is the total number of examples.
 Consequently, we will consider as consequent/target the latin people ('Vict.Descent' = 'H') and as antecedent the following attributes: 'Crm.Cd.Desc', 'AREA.NAME' and 'TIME.OCC'. Thus, we are looking for the worst areas and hours for the latin people as well as the most common crimes they suffer. Notice that we are not considering the weapon used in the crime because in many crimes this data is not proportioned and thus would affect outcoming results by reducing the dataset size.
 
 ```{r  eval=FALSE}
-latin.1 <- dataframe.p(DB, target.class = 'Vict.Descent', target='H', antecedent = c('Crm.Cd.Desc', 'AREA.NAME', 'TIME.OCC'), method="sdmap", quality="ps", csvname = "latin_sdmap_ps.csv")
+latin.1 <- Subgroups.finder(DB, target.attribute = 'Vict.Descent', target.value ='H', antecedent = c('Crm.Cd.Desc', 'AREA.NAME', 'TIME.OCC'), method="sdmap", quality="ps", path.csv = "latin_sdmap_ps.csv")
 ```
 
 ```{r include=FALSE}
@@ -186,7 +242,7 @@ print(latin.1)
 We now use as the quality function the Binomial-Test in order to determine how far from random choice are the subgroups found.
 
 ```{r  eval=FALSE}
-latin.2 <- dataframe.p(DB, target.class = 'Vict.Descent', target='H', antecedent = c('Crm.Cd.Desc', 'AREA.NAME', 'TIME.OCC'), method="sdmap", quality="bin", csvname = "latin_sdmap_bin.csv")
+latin.2 <- Subgroups.finder(DB, target.attribute = 'Vict.Descent', target.value='H', antecedent = c('Crm.Cd.Desc', 'AREA.NAME', 'TIME.OCC'), method="sdmap", quality="bin", path.csv = "latin_sdmap_bin.csv")
 ```
 
 ```{r include=FALSE}
@@ -200,7 +256,7 @@ print(latin.2)
 Next, we will change the method used to find subgroups by selecting the BSD method and we keep the quality function to be the Binomial-Test.
 
 ```{r  eval=FALSE}
-latin.3 <- dataframe.p(DB, target.class = 'Vict.Descent', target='H', antecedent = c('Crm.Cd.Desc', 'AREA.NAME', 'TIME.OCC'), method="bsd", quality="bin", csvname = "latin_bsd_bin.csv")
+latin.3 <- Subgroups.finder(DB, target.attribute = 'Vict.Descent', target.value ='H', antecedent = c('Crm.Cd.Desc', 'AREA.NAME', 'TIME.OCC'), method="bsd", quality="bin", path.csv = "latin_bsd_bin.csv")
 ```
 
 ```{r include=FALSE}
@@ -271,7 +327,7 @@ Our goal is now to discover within the dataset potential crimes suffered by wome
 For that purpose we will use the function DiscoverSubgroups from the 'rsubgroup' library with the 'sdmap' method and the quality function Chi-Square-Test as well as the Piatetsky-Shapiro quality measurement.
 
 ```{r  eval=FALSE}
-women.1 <- dataframe.p(DB, target.class = 'Vict.Sex', target='F', antecedent = c('Crm.Cd.Desc', 'TIME.OCC', 'Premis.Desc'), method="sdmap", quality="ps", csvname = "women_sdmap_ps.csv")
+women.1 <- Subgroups.finder(DB, target.attribute = 'Vict.Sex', target.value ='F', antecedent = c('Crm.Cd.Desc', 'TIME.OCC', 'Premis.Desc'), method="sdmap", quality="ps", path.csv = "women_sdmap_ps.csv")
 ```
 
 ```{r include=FALSE}
@@ -285,7 +341,7 @@ print(women.1)
 We now use as the quality function the Binomial-Test in order to determine how far from random choice are the subgroups found.
 
 ```{r  eval=FALSE}
-women.2 <- dataframe.p(DB, target.class = 'Vict.Sex', target='F', antecedent = c('Crm.Cd.Desc', 'TIME.OCC', 'Premis.Desc'), method="sdmap", quality="bin", csvname = "women_sdmap_bin.csv")
+women.2 <- Subgroups.finder(DB, target.attribute = 'Vict.Sex', target.value='F', antecedent = c('Crm.Cd.Desc', 'TIME.OCC', 'Premis.Desc'), method="sdmap", quality="bin", path.csv = "women_sdmap_bin.csv")
 ```
 
 ```{r include=FALSE}
@@ -299,7 +355,7 @@ print(women.2)
 Next, we will change the method used to find subgroups by selecting the BSD method and we keep the quality function to be the Binomial-Test.
 
 ```{r  eval=FALSE}
-women.3 <- dataframe.p(DB, target.class = 'Vict.Sex', target='F', antecedent = c('Crm.Cd.Desc', 'TIME.OCC', 'Premis.Desc'), method="bsd", quality="bin", csvname = "women_bsd_bin.csv")
+women.3 <- Subgroups.finder(DB, target.attribute = 'Vict.Sex', target.value ='F', antecedent = c('Crm.Cd.Desc', 'TIME.OCC', 'Premis.Desc'), method="bsd", quality="bin", path.csv = "women_bsd_bin.csv")
 ```
 
 ```{r include=FALSE}
@@ -349,44 +405,232 @@ We conclude that women are really susceptible to suffer from different type of a
 
 ### Men 
 
-We will first calculate the rules using SD-Map and sort them according to their value on the Piatetsky-Shapiro quality measurement.
+Having analyzed the type of crimes committed against the female population, it is now time to focus on those involving men as victims. According to the [National Gang Center]( https://www.nationalgangcenter.gov/) from the USA, street gangs are conformed predominantly by men. Therefore, the male population would be more prone to take part in violent crimes and murders both as victims and aggressors, [pushing the homicide rate](https://abcnews.go.com/US/story?id=90009&page=1) in the city of LA.
+
+![Distribution of gang members by gender in the USA. Retrieved from https://www.nationalgangcenter.gov/Content/Images/Charts/Demographics-3.png.](https://www.nationalgangcenter.gov/Content/Images/Charts/Demographics-3.png)
+
+Thus, with the intention of verifying the previous statements and discovering other potential type of crimes against men, we will consider as consequent/target the male population (‘Vict.Sex’ = ‘M’) and as antecedent the following attributes: ‘Crm.Cd.Desc’, ‘Premis.Desc’ and ‘TIME.OCC’. Although the weapon used in the crime could be a potential source of knowledge related to gang wars, we have rejected its implication in the analysis due to the lack of information from this specific feature, after veryfing that the rules obtained when considered did not have statistical significance.
+
+As before, we will begin the subgroups discovery using the 'sdmap' method and sorting the results according to the Piatetsky-Shapiro quality measurement.
 
 ```{r eval=FALSE} 
-crime.to.men <- dataframe.p(DB,"Vict.Sex","M",c("Vict.Descent","Premis.Desc","Crm.Cd.Desc", "TIME.OCC"),"sdmap","ps","men_wellprocessed.csv")
+men.1 <- Subgroups.finder(DB, target.attribute = "Vict.Sex", target.value= "M",antecedent = c("Vict.Descent","Premis.Desc","Crm.Cd.Desc", "TIME.OCC"), method= "sdmap",quality= "ps", path.csv = "men_sdmap_ps.csv")
 ```
 
 ```{r include=FALSE}
-crime.to.men=read.csv('SELECTED/men_wellprocessed.csv')[-1]
+men.1 <- read.csv('men_sdmap_ps.csv')[-1]
 ```
 
 ```{r}
-print(crime.to.men)
+print(men.1)
 ```
 
-Regarding the first rule, the class "O" from "Vict.Descent" indicates that the victim had a descent different than asian, black, or hispanic among others; a group which constitutes about 9% of the total number of victims. Thus, we see that if the victim belongs to any of these minoritary groups, there is a 65% probability for it to be a man, with a high quality value for both $\chi^{2}$ and Piatetsky-Shapiro.
-
-The second rule, which is probably the most relevant, shows that if an aggravated assault or an assault wih a deadly weapon was commited, there is a 73% probability of the victim being a men, with high values for the two quality measurements mentioned. In principle there could be many factors contributing to the apppearance of this rule. For instance, as street gangs are conformed mostly by men, during the street conflicts they are more likely to be both the victims and the agressors.
-
-Finally, we would like to highlight rule number 9, indicating that if a shoplifting crime was commited it is 83% likely that the victim is a man. In principle, as is not statistically easier to steal material from men, the most likely explanation is that shoplifters are more compassionate towards women than men.
-
-Let's see the results obtained using the BSD algorithm, sorting the rules using the binomial test as a measurement of their quality.
+We will now repeat the search using the BSD method keeping Piatetsky-Shapiro as the quality mesurement.
 
 ```{r eval=FALSE} 
-crime.to.men.v2 <- dataframe.p(DB,"Vict.Sex","M",c("Vict.Descent","Premis.Desc","Crm.Cd.Desc", "TIME.OCC"),"bsd","bin","men_wellprocessed.csv")
+men.2 <- Subgroups.finder(DB, target.attribute = "Vict.Sex", target.value= "M",antecedent = c("Vict.Descent","Premis.Desc","Crm.Cd.Desc", "TIME.OCC"), method= "sdmap",quality= "ps", path.csv = "men_bsd_ps.csv")
 ```
 
 ```{r include=FALSE}
-crime.to.men.v2=read.csv('SELECTED/men_bin_bsd.csv')[-1]
+men.2 <- read.csv('men_bsd_ps.csv')[-1]
 ```
 
 ```{r}
-print(crime.to.men.v2)
+print(men.2)
 ```
+
+Then, we will change the quality function to Binomial-Test using the BSD method.
+
+```{r eval=FALSE} 
+men.3 <- Subgroups.finder(DB, target.attribute = "Vict.Sex", target.value= "M",antecedent = c("Vict.Descent","Premis.Desc","Crm.Cd.Desc", "TIME.OCC"), method= "sdmap",quality= "ps", path.csv = "men_bsd_bin.csv")
+```
+
+```{r include=FALSE}
+men.3 <- read.csv('men_bsd_bin.csv')[-1]
+```
+
+```{r}
+print(men.3)
+```
+
+As in the previous cases, we notice that both SD-Map and BSD give similar results. Furthermore, since other quality measurement functions implemented in  `DiscoverSubgroups` lead to rules with high accuracy and low support, we will introduce $Q_{g}$, a quality evaluation metric that takes into account the balance between the perfectly classifed examples and the rarity of its distribution. It is given by
+
+$$Q_{g}(R)=\frac{TP}{FP+g} = \frac{n(\mathrm{Target}_{\mathrm{value}} \cdot \mathrm{Cond})}{n(\overline{\mathrm{Target}_{\mathrm{value}}} \cdot \mathrm{Cond}) +g},$$
+
+where $g\in[0.5,100]$ is a generalization parameter. We see that $Q_{g}$ will depend only on $TP/TF= f(p,\mathrm{size})$ if
+$$g \ll FP = \Big(\frac{1}{p}-1\Big) \mathrm{size}. $$
+As we are interested in rules with high accuracy, we will set as a goal $p^{*}\equiv 0.75$ or equivalently $FP^{*} \simeq 0.3 \mathrm{size}$, and estimating $\mathrm{size}^{*}\equiv 1000$ to be a statistically significant size, we obtain  $FP^{*}\simeq 300$. Therefore, although it is not in the recommended interval, we have chosen $g=300 \simeq FP^{*}$; which allows us to penalyze only the rules with size smaller or of the order of $\mathrm{size}^{*}$, leading to rules with both high accuracy and support.
+
+```{r}
+Q.g <- function(p, n.target.cond, g){
+  n.cond = n.target.cond/p
+  n.notarget.cond <- n.cond-n.target.cond
+  q.g <- n.target.cond/(n.notarget.cond+g)
+  return(q.g)
+}
+```
+
+```{r}
+men.4 <- data.frame(men.3)
+men.4$quality = Q.g(men.3$p, men.3$size, 300 )
+men.4 <- men.4[order(-men.4$quality),]
+print(men.4)
+```
+
+We would like to highlight the following rules:
+
+1. **Crime against minoritary ethnics**. The class "O" from "Vict.Descent" indicates that the victim had a descent different than asian, black, or hispanic among others; a group which constitutes about 9% of the total number of victims. 
+
+<ul style="list-style-type:disc;"> <li>Vict.Descent =O -> Vict.Sex = M; p=0.65, ps=2469.15, chi2=1414.12, bin=17.73, Qg=1.80.</li> </ul>
+
+<ul style="list-style-type:none;"> <li> Thus, we see that if the victim belongs to any of these minoritary groups there is a higher chance that the crime was committed to a man. The rule shows reasonably large quality values, specially in the Piatetsky-Shapiro due to the large support. </li></ul>
+
+2. **Aggravated assaults/deadly weapons**. According to the rules found, these crimes affect predominantly to men. 
+
+<ul style="list-style-type:disc;"> <li>Crm.Cd.Desc=ASSAULT WITH DEADLY WEAPON, AGGRAVATED ASSAULT -> Vict.Sex = M; p=0.73, ps=2131.40, chi2= 1838.72, bin=20.77, Qg=2.51.</li></ul>
+
+<ul style="list-style-type:none;"> <li>There could be many factors contributing to the apppearance of this rule, such as the mentioned street gangs, mainly conformed by men. </li></ul>
+
+3. **Shoplifting**. We have found that men are much more likely to be victims of shoplifting of low valuable material ($950 or below).
+
+<ul style="list-style-type:disc;"> <li>Crm.Cd.Desc=SHOPLIFTING - PETTY THEFT ($950 & UNDER) -> Vict.Sex=M; p=0.83, ps=825.25, chi2=1032.35, bin=15.92, Qg=3.16.</li></ul>
+
+<ul style="list-style-type:none;"> <li> Although the rule has low support in comparisson, the high accuracy and performance in the binomial test and $Q_g$ indicate its relevance. The result is surprising and hard to understand, as in principle it does not seem statistically easier to steal material from men. Possible explanations are that shoplifters might be more compassionate towards women, or male owners could sell material more prone to robbery; but from the data available is not possible to perform a rigorous analysis. </li></ul>
+
 
 ### Time interval (8,12]
+We have analyzed the incidence of criminality on every time interval, choosing each of them as the target attribute and taking as antecedent the attributes 'Vict.Sex', 'Premis.Desc', 'Vict.Descent', 'Crm.Cd.Desc'; obtaining interesting results between 8am and 12am.
 
+We will start by exploring the subgroups using the SD-Map algorithm, sorting the results by their value on the Piatetsky-Shapiro quality measurement.
 
 ```{r eval=FALSE} 
-dataframe.p(DB,"TIME.OCC","(8.01,12]",c("Vict.Sex","Premis.Desc","Vict.Descent","Crm.Cd.Desc"),"sdmap","ps","8am_wellprocessed.csv")
+time.1 <- Subgroups.finder(DB, target.attribute =  "TIME.OCC",target.level = "(8.01,12]",antecedent =  c("Vict.Sex","Premis.Desc","Vict.Descent","Crm.Cd.Desc"),method= "sdmap",quality = "ps",path.csv = "8am_sdmap_ps.csv")
 ```
-## Conclussion
+
+```{r include=FALSE}
+time.1 <- read.csv('8am_sdmap_ps.csv')[-1]
+```
+
+```{r}
+print(time.1)
+```
+
+Then, using the BSD method keeping Piatetsky-Shapiro as the quality mesurement we obtain the following:
+
+```{r eval=FALSE} 
+time.2 <- Subgroups.finder(DB, target.attribute = "TIME.OCC", target.value= "(8.01,12]",antecedent = c("Vict.Sex","Premis.Desc","Vict.Descent","Crm.Cd.Desc"), method= "bsd",quality= "ps", path.csv = "8am_bsd_ps.csv")
+```
+
+```{r include=FALSE}
+time.2 <- read.csv('8am_bsd_ps.csv')[-1]
+```
+
+```{r}
+print(time.2)
+```
+
+Thus, as in the previous cases the BSD and SD-Map algorithm lead to the same rules. Changing the quality function to Binomial-Test and using the BSD method we get:
+
+```{r eval=FALSE} 
+time.3 <- Subgroups.finder(DB, target.attribute =  "TIME.OCC",target.level = "(8.01,12]",antecedent =  c("Vict.Sex","Premis.Desc","Vict.Descent","Crm.Cd.Desc"),method= "bsd",quality = "bin",path.csv = "8am_bsd_bin.csv")
+```
+
+```{r include=FALSE}
+time.3 <- read.csv('8am_bsd_bin.csv')[-1]
+```
+
+```{r}
+print(time.3)
+```
+
+Lastly, we will evaluate $Q_{g}$ for the set of rules obtained using Piatetsky-Shapiro as the quality metric:
+
+```{r}
+time.4 <- data.frame(time.3)
+time.4$quality = Q.g(time.3$p, time.3$size, 300 )
+time.4 <- time.4[order(-time.4$quality),]
+print(time.4)
+```
+
+As it can be seen, the mayority of the rules concern the **theft of identity**. As stated by the [police department](http://www.lapdonline.org/search_results/content_basic_view/1364) from Los Angeles, the victim of identity theft is a person whose identity has been fraudulently assumed by another with the intent to obtain credit, goods, or services without the victim’s consent. No financial loss is necessary, but is usually linked to this type of crime. It includes the criminal assumption of someone’s name, address, credit card information, driver’s license, social security number and other personal data. Focusing now on two specific rules:
+
+<ul style="list-style-type:disc;"> <li> Crm.Cd.Desc=THEFT OF IDENTITY -> TIME.OCC = (8.01,12]; p=0.43, ps=1939.24, chi2=3092.98, bin=21.37, Qg=0.734.</li> 
+<li> Premis.Desc=SINGLE FAMILY DWELLING, Crm.Cd.Desc=THEFT OF IDENTITY -> TIME.OCC = (8.01,12]; p=0.45, ps=1373.81, chi2=2341.02, bin=18.75, Qg=0.782.</li>
+</ul>
+
+We see that between 8am and 12am almost half of the identity theft crimes take place, with a significant value for the Piatetsky-Shapiro metric despite the low accuracy; and the greatests $\chi^{2}$ values we have found. Having data from the working hours could be interesting, as based on the crime location and time, it is possible that criminals rely on this information to commit the felonies. Since the police department from LA does not distinguish identity theft cybercrime from the rest, it is also probable that a large proportion of these crimes which took place in family dwellings are of such kind; specially if we take into account that California is the most affected state among the USA in terms of cybercrime:
+
+<tbody><tr>
+<td class="tablewrapper">
+<table class="tablesorter" style="border-collapse:collapse; width:228pt; border:medium none" width="303">
+<thead>
+<tr style="height:12.75pt" height="17">
+<th style="white-space: nowrap; text-align: center;" class="header">Rank</th>
+<th style="white-space: nowrap; text-align: center;" class="header">State</th>
+<th style="white-space: nowrap; text-align: center;" class="header">Number</th>
+</tr>
+</thead>
+<tbody>
+<tr class=" odd" style="height:12.75pt" height="17">
+<td>1</td>
+<td>California</td>
+<td style="text-align: right;">50,132</td>
+</tr>
+<tr class=" even" style="height:12.75pt" height="17">
+<td>2</td>
+<td>Florida</td>
+<td style="text-align: right;">27,178</td>
+</tr>
+<tr class=" odd" style="height:12.75pt" height="17">
+<td>3</td>
+<td>Texas</td>
+<td style="text-align: right;">27,178</td>
+</tr>
+<tr class=" even" style="height:12.75pt" height="17">
+<td>4</td>
+<td>New York</td>
+<td style="text-align: right;">21,371</td>
+</tr>
+<tr class=" odd" style="height:12.75pt" height="17">
+<td>5</td>
+<td>Washington</td>
+<td style="text-align: right;">13,095</td>
+</tr>
+<tr class=" even" style="height:12.75pt" height="17">
+<td>6</td>
+<td>Maryland</td>
+<td style="text-align: right;">11,709</td>
+</tr>
+<tr class=" odd" style="height:12.75pt" height="17">
+<td>7</td>
+<td>Virginia</td>
+<td style="text-align: right;">11,674</td>
+</tr>
+<tr class=" even" style="height:12.75pt" height="17">
+<td>8</td>
+<td>Pennsylvania</td>
+<td style="text-align: right;">10,914</td>
+</tr>
+<tr class=" odd" style="height:12.75pt" height="17">
+<td>9</td>
+<td>Illinois</td>
+<td style="text-align: right;">10,337</td>
+</tr>
+<tr class=" even" style="height:12.75pt" height="17">
+<td>10</td>
+<td>Indiana</td>
+<td style="text-align: right;">9,746</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+<div class="tablewrapper-captions">
+<p> <small> Based on the total number of complaints submitted to the Internet Crime Complaint Center via its website from each state where the complainant provided state information. Retrieved from [https://www.iii.org/fact-statistic/facts-statistics-identity-theft-and-cybercrime](https://www.iii.org/fact-statistic/facts-statistics-identity-theft-and-cybercrime) </small> </p>
+</div>
+
+## Conclusion
+We have analyzed the dataset focusing on latin people, gender and the time of occurrence of the crimes. Regarding the first group, we have found a higher criminality towards this community in Hollenbeck, a gang-dominated region. Then, not surprisingly we have confirmed the larger incidence of assaults, rapes and sexual contact suffered by women, being them more prone to happen in a domestic environment; while for men we have seen a greater occurrence of aggravated assaults or assaults with deadly weapons and unexpectedly a higher chance of being shoplifted, as well as a higher general incidence of criminality when the victim belongs to a minoritary ethnic. Finally, we have found a relation between identity theft and the time interval between 8am and 12am.
+
+As possible refinements, we believe that different discretizations could have led to interesting results, such as splitting the dates in seasons or the time of occurrence in morning-noon, afternoon and night. Furthermore, having data from the criminals would have produced higher quality outcomes from a statistical point of view, although this could give rise to discrimination or hate towards people for belonging to a particular social group, for instance the latin community.
